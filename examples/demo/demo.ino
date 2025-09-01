@@ -211,15 +211,25 @@ void setup()
 
 
     Wire.begin(BOARD_SDA, BOARD_SCL);
-    Wire.beginTransmission(PCF8563_SLAVE_ADDRESS);
-    if (Wire.endTransmission() == 0) {
-        rtc.begin(Wire, PCF8563_SLAVE_ADDRESS, BOARD_SDA, BOARD_SCL);
+
+    int retry = 5;
+    while (retry--) {
+        Wire.beginTransmission(0x51);
+        if (Wire.endTransmission() == 0) {
+            found_rtc = true;
+            break;
+        }
+        delay(300);
+    }
+
+    rtc.begin(Wire);
+
+    Wire.beginTransmission(0x51);
+    if (found_rtc) {
         // rtc.setDateTime(2022, 6, 30, 0, 0, 0);
         writeln((GFXfont *)&FiraSans, "➸ RTC is online  😀 \n", &cursor_x, &cursor_y, NULL);
-        found_rtc = true;
     } else {
         writeln((GFXfont *)&FiraSans, "➸ RTC is probe failed!  😂 \n", &cursor_x, &cursor_y, NULL);
-        found_rtc = false;
     }
 
 
