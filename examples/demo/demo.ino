@@ -212,19 +212,10 @@ void setup()
 
     Wire.begin(BOARD_SDA, BOARD_SCL);
 
-    int retry = 5;
-    while (retry--) {
-        Wire.beginTransmission(0x51);
-        if (Wire.endTransmission() == 0) {
-            found_rtc = true;
-            break;
-        }
-        delay(300);
-    }
-
     rtc.begin(Wire);
 
     Wire.beginTransmission(0x51);
+    found_rtc = Wire.endTransmission() == 0;
     if (found_rtc) {
         // rtc.setDateTime(2022, 6, 30, 0, 0, 0);
         writeln((GFXfont *)&FiraSans, "➸ RTC is online  😀 \n", &cursor_x, &cursor_y, NULL);
@@ -351,13 +342,9 @@ void loop()
         // https://man7.org/linux/man-pages/man3/strftime.3.html
 
         struct tm timeinfo;
-        if (found_rtc) {
-            // Get the time C library structure
-            rtc.getDateTime(&timeinfo);
-            strftime(buf, 64, "➸ %b %d %Y %H:%M:%S", &timeinfo);
-        } else {
-            snprintf(buf, 64, "➸ RTC Not online");
-        }
+        // Get the time C library structure
+        rtc.getDateTime(&timeinfo);
+        strftime(buf, 64, "➸ %b %d %Y %H:%M:%S", &timeinfo);
         writeln((GFXfont *)&FiraSans, buf, &cursor_x, &cursor_y, NULL);
 
         /**
