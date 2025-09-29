@@ -65,7 +65,6 @@ static void epd_draw_pixel_area(int x, int y, uint8_t color, uint8_t *framebuffe
  * @param nd   Number of bytes to read
  */
 #if ESP_IDF_VERSION_MAJOR >= 5 // IDF 5+
-//static unsigned int feed_buffer(JDEC *jd, byte	 *buff, uint32_t nd);
 static UINT feed_buffer(JDEC *jd, BYTE *buff, UINT nd);
 #else
 static uint32_t feed_buffer(JDEC *jd, uint8_t *buff, uint32_t nd);
@@ -80,7 +79,6 @@ static uint32_t feed_buffer(JDEC *jd, uint8_t *buff, uint32_t nd);
  * @param rect   Rectangular region to output
  */
 #if ESP_IDF_VERSION_MAJOR >= 5 // IDF 5+
-//static unsigned int tjd_output(JDEC *jd, void *bitmap, JRECT *rect);
 static UINT tjd_output(JDEC *jd, void *bitmap, JRECT *rect);
 #else
 static uint32_t tjd_output(JDEC *jd, void *bitmap, JRECT *rect);
@@ -311,7 +309,6 @@ static void epd_draw_pixel_area(int x, int y, uint8_t color, uint8_t *framebuffe
 }
 
 #if ESP_IDF_VERSION_MAJOR >= 5 // IDF 5+
-//static unsigned int feed_buffer(JDEC *jd, uint8_t *buff, uint32_t nd)
 static UINT feed_buffer(JDEC *jd, BYTE *buff, UINT nd)
 #else
 static uint32_t feed_buffer(JDEC *jd, uint8_t *buff, uint32_t nd)
@@ -333,7 +330,6 @@ static uint32_t feed_buffer(JDEC *jd, uint8_t *buff, uint32_t nd)
 }
 
 #if ESP_IDF_VERSION_MAJOR >= 5 // IDF 5+
-//static unsigned int tjd_output(JDEC *jd, void *bitmap, JRECT *rect)
 static UINT tjd_output(JDEC *jd, void *bitmap, JRECT *rect)
 #else
 static uint32_t tjd_output(JDEC *jd, void *bitmap, JRECT *rect)
