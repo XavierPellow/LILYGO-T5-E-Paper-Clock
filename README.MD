@@ -160,3 +160,4 @@ Please enter the upload mode manually.
 - The GPIOs marked with ✅ are free to use. GPIO10 Can be used for analog input, but not for others.
 - SD Pin If you don't use an SD card, these GPIOs(16,15,11,42) are free to use.
 - ESP cannot be woken up by touch interrupt because RTC_GPIO is not connected to touch interrupt in design. However, GPIO10 can be connected to GPIO47 to make touch wake-up function possible. Please see here [issues/93](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47/issues/93#issuecomment-2488500117)
+

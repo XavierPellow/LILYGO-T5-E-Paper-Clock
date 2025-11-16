@@ -47,8 +47,8 @@
 
 #define DBG_OUTPUT_PORT Serial
 
-const char *ssid = "GL-MT1300-44e";
-const char *password = "88888888";
+const char *ssid = "Artemis_2.4GEXT";
+const char *password = "19E6942496D6";
 const char *host = "lilygo";
 
 WebServer server(80);
