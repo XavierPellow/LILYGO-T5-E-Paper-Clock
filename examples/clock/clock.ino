@@ -30,13 +30,21 @@ const long gmtOffset_sec = 3600 * 10;
 const int daylightOffset_sec = 3600;
 
 const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
+const GFXfont *font = &FiraSans;
+// Based on font_properties_default()
+const FontProperties font_props{
+    .fg_color = 0,
+    .bg_color = 15,
+    .fallback_glyph = 0,
+    .flags = 0,
+};
 
 bool need_to_disconnect = false;
 
 // VARS
 // Starting Cursor Position
-int cursor_x = 20;
-int cursor_y = 60;
+int32_t cursor_x = 20;
+int32_t cursor_y = 160;
 
 // Frame buffer
 uint8_t *framebuffer;
@@ -76,12 +84,17 @@ void printLocalTime()
     // strftime(buffer, sizeof(buffer), "%A, %B %d %Y %H:%M:%S", &timeinfo);
     strftime(buffer, sizeof(buffer), "%H:%M", &timeinfo); // Succinct time format
 
-    // Reset Cursor Position
-    cursor_x = 20;
-    cursor_y = 60;
+    // Find the text's center position
+    int32_t base_pos = 0;
+    int32_t x = 0, y = 0, w = 0, h = 0;
+
+    get_text_bounds(font, buffer, &base_pos, &base_pos, &x, &y, &w, &h, &font_props);
+    Serial.println("Text bounds:");
+    Serial.printf("x: %d, y: %d, w: %d, h: %d\n", x, y, w, h);
 
     // Print to display
-    writeln((GFXfont *)&FiraSans, (char *)buffer, &cursor_x, &cursor_y, NULL);
+
+    writeln(font, buffer, &cursor_x, &cursor_y, NULL);
 }
 
 void setup()
