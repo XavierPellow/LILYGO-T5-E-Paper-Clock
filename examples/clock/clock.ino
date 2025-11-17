@@ -78,6 +78,7 @@ void printLocalTime()
 
     // Clear display
     epd_clear();
+delay(100); // Wait a bit for the display to clear
 
     // Create buffer for time string
     char buffer[64]; // adjust size as needed
@@ -92,9 +93,11 @@ void printLocalTime()
     Serial.println("Text bounds:");
     Serial.printf("x: %d, y: %d, w: %d, h: %d\n", x, y, w, h);
 
-    // Print to display
+    cursor_x = (EPD_WIDTH - w) / 2;
+    cursor_y = (EPD_HEIGHT) / 2;
 
-    writeln(font, buffer, &cursor_x, &cursor_y, NULL);
+    // Print to display
+    writeln(font, buffer, &cursor_x, &cursor_y, NULL); // Note: writeln will update cursor_x and cursor_y
 }
 
 void setup()
