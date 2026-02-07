@@ -39,24 +39,49 @@ const sFONT &font = Font36;     // From FontReg36.h
 const int bytes_per_char = 108; // Manually calculated from looking at the font
                                 // file (108 bytes per character)
 
-/// Copies a character from the font to the framebuffer at the specified
-/// coordinates. Assumes the font is monochrome and the framebuffer is 4bpp
-/// (2 pixels per byte).
-/// x and y specify the top-left corner of where the character should be drawn
-/// in the framebuffer.
-void copyCharToBuffer(char c, int x, int y, uint8_t *buffer) {
-  const int char_index = c - 32; // Font starts at ASCII 32 ' '
-  for (int row = 0; row < font.height; row++) {
-    for (int col = 0; col < font.width; col++) {
-      int byte_index = (char_index * bytes_per_char) +
-                       (row * ((font.width + 7) / 8)) + (col / 8);
-      int bit_index = 7 - (col % 8);
-      uint8_t byte = Font36_Table[byte_index];
-      uint8_t bit = (byte >> bit_index) & 0x01;
-      if (bit) {
-        int buffer_index = (row * ((font.width + 1) / 2)) + (col / 2);
-        buffer[buffer_index] &=
-            ~(0x80 >> (col % 2)); // Set the corresponding bit to 0 (black)
+void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
+                      size_t buf_height, uint8_t *buffer) {
+  if (c < 32) {
+    return; // unsupported glyph
+  }
+
+  const size_t char_index = (size_t)(c - 32);
+
+  const size_t font_bytes_per_row = (font.width + 7) >> 3;
+  const size_t fb_bytes_per_row = (buf_width + 1) >> 1;
+
+  const uint8_t *glyph = &Font36_Table[char_index * bytes_per_char];
+
+  for (size_t row = 0; row < font.height; row++) {
+    size_t dst_y = y + row;
+    if (dst_y >= buf_height) {
+      break; // vertical clip
+    }
+
+    const uint8_t *font_row = glyph + row * font_bytes_per_row;
+
+    uint8_t *fb_row = buffer + dst_y * fb_bytes_per_row;
+
+    size_t col = 0;
+
+    for (size_t b = 0; b < font_bytes_per_row; b++) {
+      uint8_t bits = font_row[b];
+
+      // Up to 8 pixels per font byte
+      for (size_t i = 0; i < 8 && col < font.width; i++, col++) {
+        size_t dst_x = x + col;
+        if (dst_x >= buf_width) {
+          bits <<= 1;
+          continue; // horizontal clip
+        }
+
+        if (bits & 0x80) {
+          size_t fb_index = dst_x >> 1;
+          uint8_t mask = (dst_x & 1) ? 0x07 : 0x70;
+          fb_row[fb_index] &= ~mask;
+        }
+
+        bits <<= 1;
       }
     }
   }
@@ -87,11 +112,17 @@ void printLocalTime() {
   Rect_t area = {
       .x = 50,
       .y = 50,
-      .width = font.width,
+      .width = font.width * 4,
       .height = font.height,
   };
 
-  copyCharToBuffer('a', 0, 0, framebuffer);
+  copyCharToBuffer('a', 0, 0, font.width * 4, font.height, framebuffer);
+  copyCharToBuffer('b', font.width * 1, 0, font.width * 4, font.height,
+                   framebuffer);
+  copyCharToBuffer('c', font.width * 2, 0, font.width * 4, font.height,
+                   framebuffer);
+  copyCharToBuffer('d', font.width * 3, 0, font.width * 4, font.height,
+                   framebuffer);
   epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
 }
 
