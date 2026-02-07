@@ -7,8 +7,6 @@
 #endif
 
 // LIBRARIES
-#include <Arduino.h> // Not sure yet if this is necessary, will check back later
-
 // Epaper
 #include "epd_driver.h"
 #include "fonts/FontReg36.h"
@@ -36,6 +34,34 @@ const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
 bool need_to_disconnect = false;
 uint8_t *framebuffer;
 
+// Font info
+const sFONT &font = Font36;     // From FontReg36.h
+const int bytes_per_char = 108; // Manually calculated from looking at the font
+                                // file (108 bytes per character)
+
+/// Copies a character from the font to the framebuffer at the specified
+/// coordinates. Assumes the font is monochrome and the framebuffer is 4bpp
+/// (2 pixels per byte).
+/// x and y specify the top-left corner of where the character should be drawn
+/// in the framebuffer.
+void copyCharToBuffer(char c, int x, int y, uint8_t *buffer) {
+  const int char_index = c - 32; // Font starts at ASCII 32 ' '
+  for (int row = 0; row < font.height; row++) {
+    for (int col = 0; col < font.width; col++) {
+      int byte_index = (char_index * bytes_per_char) +
+                       (row * ((font.width + 7) / 8)) + (col / 8);
+      int bit_index = 7 - (col % 8);
+      uint8_t byte = Font36_Table[byte_index];
+      uint8_t bit = (byte >> bit_index) & 0x01;
+      if (bit) {
+        int buffer_index = (row * ((font.width + 1) / 2)) + (col / 2);
+        buffer[buffer_index] &=
+            ~(0x80 >> (col % 2)); // Set the corresponding bit to 0 (black)
+      }
+    }
+  }
+}
+
 // Prints the time saved on the ESP's RTC
 void printLocalTime() {
   struct tm timeinfo;
@@ -58,33 +84,14 @@ void printLocalTime() {
 
   memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
 
-  const int frame_size = 108;
-  const int char_width = 22;
-  const int char_height = 36;
-
   Rect_t area = {
       .x = 50,
       .y = 50,
-      .width = char_width,
-      .height = char_height,
+      .width = font.width,
+      .height = font.height,
   };
 
-  // Copy an '!' to the buffer
-  for (int row = 0; row < char_height; row++) {
-    for (int col = 0; col < char_width; col++) {
-      int char_index = 1; // '!' character index in the font
-      int byte_index = (char_index * frame_size) +
-                       (row * ((char_width + 7) / 8)) + (col / 8);
-      int bit_index = 7 - (col % 8);
-      uint8_t byte = Font36_Table[byte_index];
-      uint8_t bit = (byte >> bit_index) & 0x01;
-      if (bit) {
-        int buffer_index = (row * ((char_width + 1) / 2)) + (col / 2);
-        framebuffer[buffer_index] &=
-            ~(0x80 >> (col % 2)); // Set the corresponding bit to 0 (black)
-      }
-    }
-  }
+  copyCharToBuffer('a', 0, 0, framebuffer);
   epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
 }
 
