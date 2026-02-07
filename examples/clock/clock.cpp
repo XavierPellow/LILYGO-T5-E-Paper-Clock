@@ -114,20 +114,9 @@ void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
 }
 
 // Prints the time saved on the ESP's RTC
-void printLocalTime() {
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) { // Write into time struct using the ESP's
-                                  // local RTC time?
-    Serial.println("No time available (yet)");
-    return;
-  }
-
+void printLocalTime(tm &timeinfo) {
   // Print to serial
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-
-  // Clear display
-  epd_clear();
-  delay(100); // Wait a bit for the display to clear
 
   // Create buffer for time string
   char timestr[64]; // adjust size as needed
@@ -147,6 +136,8 @@ void printLocalTime() {
   };
 
   copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
+  epd_clear_area_cycles(area, 3, 50);
+  delay(100); // small delay to ensure clear area is processed before drawing
   epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
 }
 
@@ -161,6 +152,8 @@ void setup() {
     delay(10);
   }
 
+  delay(5000); // Guarentee we have a way of getting back in in case we sleep
+               // forever...
   Serial.println("Starting up...");
 
   // Epaper Display Init
@@ -199,7 +192,10 @@ void setup() {
   Serial.println(" CONNECTED");
 
   // Get and print time for the first time
-  printLocalTime();
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    printLocalTime(timeinfo);
+  }
 
   // Calculate and await the initial syncing interval
 
@@ -210,16 +206,26 @@ void setup() {
 void loop() {
   if (got_time_adjustment) {
     Serial.println("Got time adjustment from NTP!");
-    printLocalTime();
+    // printLocalTime();
     WiFi.disconnect(true);
     Serial.println("WiFi Disconnected!");
     got_time_adjustment = false;
   }
 
-  delay(60000);
-  printLocalTime(); // it will take some time to sync time :)
+  // Get time
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) { // Write into time struct using the ESP's
+                                  // local RTC time?
+    Serial.println("No time available (yet)");
+    return;
+  }
 
-  // Serial.println("Starting light sleep");
-  // esp_light_sleep_start();
-  // Serial.println("Exit light sleep");
+  printLocalTime(timeinfo); // it will take some time to sync time :)
+
+  // Sleep until just after the next minute.
+  // +3: Adding a few seconds of buffer to make sure we wake up after
+  // the minute changes, not before.
+  const uint64_t wait_time_us = (60 - timeinfo.tm_sec + 3) * 1000000;
+  esp_sleep_enable_timer_wakeup(wait_time_us);
+  esp_light_sleep_start();
 }
