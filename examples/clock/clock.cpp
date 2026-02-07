@@ -34,11 +34,19 @@ const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
 bool got_time_adjustment = false;
 uint8_t *framebuffer;
 
+// Used to adjust the position of the text on the display, if needed
+const int x_offset = 0;
+const int y_offset = -20;
+// How much to move the minutes to the left, to make it look better
+// with the colon in the middle of the display. Adjust as needed.
+const int minutes_x_offset = -80;
+
 // Font info
 const sFONT &font = Font288; // From FontReg288.h
 const int bytes_per_char = sizeof(Font288_Table) / 95;
 // 95 characters in the font file (from 0x20 to 0x7E)
 
+// this is straight up vibe coded im ngl
 void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
                       size_t buf_height, uint8_t *buffer) {
   if (c < 32) {
@@ -89,10 +97,19 @@ void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
 
 void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
                         size_t buf_height, uint8_t *buffer) {
+
+  size_t char_count = 0;
   while (*str) {
     copyCharToBuffer(*str, x, y, buf_width, buf_height, buffer);
     x += font.width;
     str++;
+
+    // Adjust for the colon in the middle of the display
+    // it's only a bit of an evil hack shhhhhhhhhhh.
+    char_count++;
+    if (char_count == 3) {
+      x += minutes_x_offset;
+    }
   }
 }
 
@@ -118,14 +135,18 @@ void printLocalTime() {
 
   memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
 
+  // center the text on the display (5 characters in "HH:MM")
+  const int area_width = font.width * 5 + minutes_x_offset;
+  const int x = (EPD_WIDTH - area_width) / 2 + x_offset;
+  const int y = (EPD_HEIGHT - font.height) / 2 + y_offset;
   Rect_t area = {
-      .x = 50,
-      .y = 50,
-      .width = font.width * 5,
+      .x = x,
+      .y = y,
+      .width = area_width,
       .height = font.height,
   };
 
-  copyStringToBuffer(timestr, 0, 0, font.width * 5, font.height, framebuffer);
+  copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
   epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
 }
 
