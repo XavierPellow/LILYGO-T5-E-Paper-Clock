@@ -1,6 +1,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "fonts.h"
-const uint8_t Font36_Table [] = 
+inline const uint8_t Font36_Table [] = 
 {
 	// ASCII: 32 " " (22 pixels wide)
 	0x00, 0x00, 0x00, 

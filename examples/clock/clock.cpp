@@ -8,9 +8,9 @@
 
 // LIBRARIES
 #include <Arduino.h> // Not sure yet if this is necessary, will check back later
+
 // Epaper
 #include "epd_driver.h"
-#include "firasans.h"
 #include "fonts/FontReg36.h"
 #include "utilities.h"
 
@@ -32,31 +32,9 @@ const long gmtOffset_sec = 3600 * 10;
 const int daylightOffset_sec = 3600;
 
 const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
-const GFXfont *font = &FiraSans;
-// Based on font_properties_default()
-const FontProperties font_props{
-    .fg_color = 0,
-    .bg_color = 15,
-    .fallback_glyph = 0,
-    .flags = 0,
-};
 
 bool need_to_disconnect = false;
-
-// VARS
-// Starting Cursor Position
-int32_t cursor_x = 20;
-int32_t cursor_y = 160;
-
-// Frame buffer
 uint8_t *framebuffer;
-
-// Starting Time
-// inital_hour = &timeinfo.tm_hour;
-// inital_min = &timeinfo.tm_min;
-// inital_sec = &timeinfo.tm_sec;
-
-// FUNCTIONS
 
 // Prints the time saved on the ESP's RTC
 void printLocalTime() {
@@ -74,65 +52,12 @@ void printLocalTime() {
   epd_clear();
   delay(100); // Wait a bit for the display to clear
 
-  //   // Create buffer for time string
-  //   char buffer[64]; // adjust size as needed
-  //   // strftime(buffer, sizeof(buffer), "%A, %B %d %Y %H:%M:%S", &timeinfo);
-  //   strftime(buffer, sizeof(buffer), "%H:%M", &timeinfo); // Succinct time
-  //   format
-
-  // // Find the text's center position
-  // int32_t base_pos = 0;
-  // int32_t x = 0, y = 0, w = 0, h = 0;
-
-  // get_text_bounds(font, buffer, &base_pos, &base_pos, &x, &y, &w, &h,
-  // &font_props); Serial.println("Text bounds:"); Serial.printf("x: %d, y: %d,
-  // w: %d, h: %d\n", x, y, w, h);
-
-  // cursor_x = (EPD_WIDTH - w) / 2;
-  // cursor_y = (EPD_HEIGHT) / 2;
-
-  // // Print to display
-  // writeln(font, buffer, &cursor_x, &cursor_y, NULL); // Note: writeln will
-  // update cursor_x and cursor_y
-
-  // //Print out contents of the buffer (print running totals i.e., 16 FF, 1000
-  // 00, etc.) uint8_t prev_byte = 0xFF; int count = 0; for (int i = 0; i <
-  // EPD_WIDTH * EPD_HEIGHT / 2; i++)
-  // {
-  //     if (framebuffer[i] != prev_byte)
-  //     {
-  //         Serial.printf("0x%02X: %d\n", framebuffer[i], count);
-  //         count = 1;
-  //         prev_byte = framebuffer[i];
-  //     }
-  //     else
-  //     {
-  //         count++;
-  //     }
-  // }
-
-  // Rect_t area = {
-  //     .x = x1,
-  //     .y = *cursor_y - h + baseline_height,
-  //     .width = w,
-  //     .height = h
-  // };
+  // Create buffer for time string
+  char timestr[64]; // adjust size as needed
+  strftime(timestr, sizeof(timestr), "%H:%M", &timeinfo); // Succinct time
 
   memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
 
-  // TEST1
-  //   framebuffer[0] = 0x00;
-  //   framebuffer[2] = 0x00;
-  //   framebuffer[4] = 0x00;
-  //   framebuffer[6] = 0x00;
-  //   framebuffer[8] = 0x00;
-  //   framebuffer[10] = 0x00;
-  //   framebuffer[12] = 0x00;
-
-  // TEST2
-  // framebuffer[0] = 0x01;
-
-  // TEST3
   const int frame_size = 108;
   const int char_width = 22;
   const int char_height = 36;
@@ -172,9 +97,13 @@ void timeavailable(struct timeval *t) {
 
 void setup() {
   // Serial Init
+  const int end_wait = millis() + 1000;
   Serial.begin(115200);
-  while (!Serial)
-    ;
+  while (!Serial && millis() < end_wait) {
+    delay(10);
+  }
+
+  Serial.println("Starting up...");
 
   // Epaper Display Init
   epd_init();
@@ -206,7 +135,7 @@ void setup() {
   Serial.printf("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    delay(200);
     Serial.print(".");
   }
   Serial.println(" CONNECTED");
