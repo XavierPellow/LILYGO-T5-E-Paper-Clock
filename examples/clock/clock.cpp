@@ -84,8 +84,7 @@ public:
   }
 
   // this is straight up vibe coded im ngl
-  Error copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
-                         size_t buf_height, uint8_t *buffer)
+  Error copyCharToBuffer(char c, size_t x, size_t y)
   {
     if (c < 32)
     {
@@ -109,7 +108,7 @@ public:
 
       const uint8_t *font_row = glyph + row * font_bytes_per_row;
 
-      uint8_t *fb_row = buffer + dst_y * fb_bytes_per_row;
+      uint8_t *fb_row = framebuffer + dst_y * fb_bytes_per_row;
 
       size_t col = 0;
 
@@ -142,14 +141,12 @@ public:
     return Error::OK;
   }
 
-  void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
-                          size_t buf_height, uint8_t *buffer)
+  void DrawText(const char *str, size_t x, size_t y)
   {
-
     size_t char_count = 0;
     while (*str)
     {
-      copyCharToBuffer(*str, x, y, buf_width, buf_height, buffer);
+      copyCharToBuffer(*str, x, y);
       x += font.width;
       str++;
 
@@ -179,14 +176,21 @@ public:
     const int area_width = font.width * 5 + minutes_x_offset;
     const int x = (EPD_WIDTH - area_width) / 2 + x_offset;
     const int y = (EPD_HEIGHT - font.height) / 2 + y_offset;
-    Rect_t area = {
-        .x = x,
-        .y = y,
-        .width = area_width,
-        .height = font.height,
+    // const Rect_t area = {
+    //     .x = x,
+    //     .y = y,
+    //     .width = area_width,
+    //     .height = font.height,
+    // };
+
+    const Rect_t area = {
+        .x = 0,
+        .y = 0,
+        .width = EPD_WIDTH,
+        .height = EPD_HEIGHT,
     };
 
-    copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
+    DrawText(timestr, x, y);
     epd_clear();
     delay(100); // small delay to ensure clear area is processed before drawing
     epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
@@ -194,6 +198,8 @@ public:
 
 protected:
   uint8_t *framebuffer;
+  uint32_t buf_width = EPD_WIDTH;
+  uint32_t buf_height = EPD_HEIGHT;
 
   // Font info
   const sFONT &font = Font288; // From FontReg288.h
