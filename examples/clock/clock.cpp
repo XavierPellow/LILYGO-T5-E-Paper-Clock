@@ -46,10 +46,20 @@ const sFONT &font = Font288; // From FontReg288.h
 const int bytes_per_char = sizeof(Font288_Table) / 95;
 // 95 characters in the font file (from 0x20 to 0x7E)
 
+class EPDDisplay
+{
+public:
+  void setup() {}
+
+protected:
+};
+
 // this is straight up vibe coded im ngl
 void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
-                      size_t buf_height, uint8_t *buffer) {
-  if (c < 32) {
+                      size_t buf_height, uint8_t *buffer)
+{
+  if (c < 32)
+  {
     return; // unsupported glyph
   }
 
@@ -60,9 +70,11 @@ void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
 
   const uint8_t *glyph = &font.table[char_index * bytes_per_char];
 
-  for (size_t row = 0; row < font.height; row++) {
+  for (size_t row = 0; row < font.height; row++)
+  {
     size_t dst_y = y + row;
-    if (dst_y >= buf_height) {
+    if (dst_y >= buf_height)
+    {
       break; // vertical clip
     }
 
@@ -72,18 +84,22 @@ void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
 
     size_t col = 0;
 
-    for (size_t b = 0; b < font_bytes_per_row; b++) {
+    for (size_t b = 0; b < font_bytes_per_row; b++)
+    {
       uint8_t bits = font_row[b];
 
       // Up to 8 pixels per font byte
-      for (size_t i = 0; i < 8 && col < font.width; i++, col++) {
+      for (size_t i = 0; i < 8 && col < font.width; i++, col++)
+      {
         size_t dst_x = x + col;
-        if (dst_x >= buf_width) {
+        if (dst_x >= buf_width)
+        {
           bits <<= 1;
           continue; // horizontal clip
         }
 
-        if (bits & 0x80) {
+        if (bits & 0x80)
+        {
           size_t fb_index = dst_x >> 1;
           uint8_t mask = (dst_x & 1) ? 0x07 : 0x70;
           fb_row[fb_index] &= ~mask;
@@ -96,10 +112,12 @@ void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
 }
 
 void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
-                        size_t buf_height, uint8_t *buffer) {
+                        size_t buf_height, uint8_t *buffer)
+{
 
   size_t char_count = 0;
-  while (*str) {
+  while (*str)
+  {
     copyCharToBuffer(*str, x, y, buf_width, buf_height, buffer);
     x += font.width;
     str++;
@@ -107,19 +125,21 @@ void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
     // Adjust for the colon in the middle of the display
     // it's only a bit of an evil hack shhhhhhhhhhh.
     char_count++;
-    if (char_count == 3) {
+    if (char_count == 3)
+    {
       x += minutes_x_offset;
     }
   }
 }
 
 // Prints the time saved on the ESP's RTC
-void writeTimeToDisplay(tm &timeinfo) {
+void writeTimeToDisplay(tm &timeinfo)
+{
   // Print to serial
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
   // Create buffer for time string
-  char timestr[64]; // adjust size as needed
+  char timestr[64];                                       // adjust size as needed
   strftime(timestr, sizeof(timestr), "%H:%M", &timeinfo); // Succinct time
 
   memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
@@ -146,21 +166,25 @@ void timeavailable(struct timeval *t) { got_time_adjustment = true; }
 
 // Initializes Serial and waits for a short period to ensure it's ready before
 // proceeding.
-void setupSerial(const int wait_time_ms = 1000) {
+void setupSerial(const int wait_time_ms = 1000)
+{
   const int end_wait = millis() + wait_time_ms;
   Serial.begin(115200);
-  while (!Serial && millis() < end_wait) {
+  while (!Serial && millis() < end_wait)
+  {
     delay(10);
   }
 }
 
-void setupDisplay() {
+void setupDisplay()
+{
   epd_init();
 
   // Allocate memory for frame buffer
   framebuffer =
       (uint8_t *)ps_calloc(sizeof(uint8_t), EPD_WIDTH * EPD_HEIGHT / 2);
-  if (!framebuffer) {
+  if (!framebuffer)
+  {
     Serial.println("alloc memory failed !!!");
     while (1)
       ;
@@ -172,7 +196,8 @@ void setupDisplay() {
   epd_clear();
 }
 
-void setupNTP() {
+void setupNTP()
+{
   sntp_set_time_sync_notification_cb(
       timeavailable);      // set notification call-back function
   sntp_servermode_dhcp(1); // (optional)
@@ -182,17 +207,20 @@ void setupNTP() {
                ntpServer2); // (Hopefully) Automatic daylight savings offsetting
 }
 
-void setupWiFi() {
+void setupWiFi()
+{
   Serial.printf("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(200);
     Serial.print(".");
   }
   Serial.println(" CONNECTED");
 }
 
-void setup() {
+void setup()
+{
   setupSerial();
   delay(5000); // Guarentee we have a way of getting back in in case we sleep
                // forever...
@@ -204,7 +232,8 @@ void setup() {
 
   // Get and print time for the first time
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getLocalTime(&timeinfo))
+  {
     writeTimeToDisplay(timeinfo);
   }
 
@@ -212,8 +241,10 @@ void setup() {
   Serial.println("Setup complete!");
 }
 
-void loop() {
-  if (got_time_adjustment) {
+void loop()
+{
+  if (got_time_adjustment)
+  {
     Serial.println("Got time adjustment from NTP!");
     // printLocalTime();
     WiFi.disconnect(true);
@@ -223,8 +254,9 @@ void loop() {
 
   // Get time
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) { // Write into time struct using the ESP's
-                                  // local RTC time?
+  if (!getLocalTime(&timeinfo))
+  { // Write into time struct using the ESP's
+    // local RTC time?
     Serial.println("No time available (yet)");
     return;
   }
