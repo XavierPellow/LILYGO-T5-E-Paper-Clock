@@ -83,7 +83,12 @@ public:
 
     // Reset Display
     epd_poweron();
-    epd_clear();
+    ClearDisplay();
+  }
+
+  void ClearDisplay()
+  {
+    epd_clear_area_cycles({0, 0, EPD_WIDTH, EPD_HEIGHT}, 2, 20);
   }
 
   // this is straight up vibe coded im ngl
@@ -200,7 +205,7 @@ public:
   // - Clears the display and redraws the framebuffer.
   void Update()
   {
-    epd_clear();
+    ClearDisplay();
     delay(100); // small delay to ensure clear area is processed before drawing
     epd_draw_image({0, 0, EPD_WIDTH, EPD_HEIGHT}, framebuffer, DrawMode_t::BLACK_ON_WHITE);
   }
