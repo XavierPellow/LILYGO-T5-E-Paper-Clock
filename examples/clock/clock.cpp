@@ -136,7 +136,7 @@ void printLocalTime(tm &timeinfo) {
   };
 
   copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
-  epd_clear_area_cycles(area, 3, 50);
+  epd_clear();
   delay(100); // small delay to ensure clear area is processed before drawing
   epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
 }
