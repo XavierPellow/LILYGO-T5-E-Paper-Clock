@@ -33,13 +33,6 @@ const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
 
 bool got_time_adjustment = false;
 
-// Used to adjust the position of the text on the display, if needed
-const int x_offset = 0;
-const int y_offset = -20;
-// How much to move the minutes to the left, to make it look better
-// with the colon in the middle of the display. Adjust as needed.
-const int minutes_x_offset = -80;
-
 // Error codes, based on ESP-IDF's esp_err_t
 enum class Error
 {
@@ -84,7 +77,8 @@ public:
   }
 
   // this is straight up vibe coded im ngl
-  Error copyCharToBuffer(char c, size_t x, size_t y)
+  // Draws a single character onto the framebuffer at the specified position.
+  Error DrawChar(char c, size_t x, size_t y)
   {
     if (c < 32)
     {
@@ -141,27 +135,46 @@ public:
     return Error::OK;
   }
 
-  void DrawText(const char *str, size_t x, size_t y)
+  // Draws a string onto the framebuffer at the specified position.
+  // - Uses bounding boxes to place characters more tightly together
+  // - If x or y is 0, centers the text in that dimension
+  void DrawText(const char *str, uint32_t x = -1, uint32_t y = -1, uint32_t inter_char_spacing = 20)
   {
     size_t char_count = 0;
-    while (*str)
+    if (x == -1)
     {
-      copyCharToBuffer(*str, x, y);
-      x += font.width;
-      str++;
-
-      // Adjust for the colon in the middle of the display
-      // it's only a bit of an evil hack shhhhhhhhhhh.
-      char_count++;
-      if (char_count == 3)
+      // Calculate total width of the text using bounding boxes
+      uint32_t total_width = 0;
+      for (const char *s = str; *s; s++)
       {
-        x += minutes_x_offset;
+        if (*s >= 32 && *s < 127)
+        {
+          total_width += bboxes[*s - 32].width + inter_char_spacing;
+        }
       }
+      total_width -= inter_char_spacing; // Remove extra spacing after the last character
+      x = (EPD_WIDTH - total_width) / 2;
+    }
+    y = y_offset +
+        ((y == (uint32_t)-1)
+             ? (EPD_HEIGHT - font.height) / 2
+             : y);
+
+    for (const char *s = str; *s; s++)
+    {
+      // Move colons up by colon_offset for better visual alignment
+      const uint32_t used_y = (*s == ':')
+                                  ? (y + colon_offset)
+                                  : y;
+      DrawChar(*s, x, used_y);
+
+      // Move x for the next character, using the bounding box width for tighter spacing
+      x += bboxes[*s - 32].width + inter_char_spacing;
     }
   }
 
-  // Prints the time saved on the ESP's RTC
-  void writeTimeToDisplay(tm &timeinfo)
+  // Prints the time saved on the ESP's RTC, and also draws it on the display centered.
+  void DrawTimeCentered(tm &timeinfo)
   {
     // Print to serial
     Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
@@ -172,39 +185,29 @@ public:
 
     memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
 
-    // center the text on the display (5 characters in "HH:MM")
-    const int area_width = font.width * 5 + minutes_x_offset;
-    const int x = (EPD_WIDTH - area_width) / 2 + x_offset;
-    const int y = (EPD_HEIGHT - font.height) / 2 + y_offset;
-    // const Rect_t area = {
-    //     .x = x,
-    //     .y = y,
-    //     .width = area_width,
-    //     .height = font.height,
-    // };
+    DrawText(timestr);
+    Update();
+  }
 
-    const Rect_t area = {
-        .x = 0,
-        .y = 0,
-        .width = EPD_WIDTH,
-        .height = EPD_HEIGHT,
-    };
-
-    DrawText(timestr, x, y);
+  void Update()
+  {
     epd_clear();
     delay(100); // small delay to ensure clear area is processed before drawing
-    epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
+    epd_draw_image({0, 0, EPD_WIDTH, EPD_HEIGHT}, framebuffer, DrawMode_t::BLACK_ON_WHITE);
   }
 
 protected:
   uint8_t *framebuffer;
   uint32_t buf_width = EPD_WIDTH;
   uint32_t buf_height = EPD_HEIGHT;
+  uint32_t y_offset = -24;     // How much to move all text (-'ve ^, +'ve v)
+  uint32_t colon_offset = -24; // How much to move a colon (-'ve ^, +'ve v)
 
   // Font info
-  const sFONT &font = Font288; // From FontReg288.h
-  const int bytes_per_char = sizeof(Font288_Table) / 95;
-  // 95 characters in the font file (from 0x20 to 0x7E)
+  const uint32_t NUM_CHARS = 95;         // From 0x20 to 0x7E inclusive
+  const sFONT &font = Font288;           // From FontReg288.h
+  const Rect_t *bboxes = Font288_bboxes; // From FontReg288.h
+  const int bytes_per_char = sizeof(Font288_Table) / NUM_CHARS;
 } Display;
 // Callback function (get's called when time adjusts via NTP)
 void timeavailable(struct timeval *t) { got_time_adjustment = true; }
@@ -259,7 +262,7 @@ void setup()
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    Display.writeTimeToDisplay(timeinfo);
+    Display.DrawTimeCentered(timeinfo);
   }
 
   // Done
@@ -286,7 +289,7 @@ void loop()
     return;
   }
 
-  Display.writeTimeToDisplay(timeinfo);
+  Display.DrawTimeCentered(timeinfo);
 
   // Sleep until just after the next minute.
   // +3: Adding a few seconds of buffer to make sure we wake up after
