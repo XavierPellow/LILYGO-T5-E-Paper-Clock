@@ -16,22 +16,32 @@
 #include "sntp.h"
 #include "time.h"
 #include <WiFi.h>
+#include <esp_wifi.h>
 
 // CONSTS
 // const char* ssid       = "Dah0use";
 // const char* password   = "Eto nash durackij wpA kluchik";
 
+struct WifiCreds
+{
+  const char *ssid;
+  const char *password;
+};
+const WifiCreds wifi_creds[] = {
+    {"McDonkeys_2_4", "mdqfyephjb"},
+    {"Dah0use", "Eto nash durackij wpA kluchik"},
+};
+// TODO: Have the program loop through them until it finds one it can connect to.
 const char *ssid = "McDonkeys_2_4";
 const char *password = "mdqfyephjb";
 
 const char *ntpServer1 = "au.pool.ntp.org";
 const char *ntpServer2 = "pool.ntp.org";
-const long gmtOffset_sec = 3600 * 10;
-const int daylightOffset_sec = 3600;
 
 const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
 
 bool got_time_adjustment = false;
+const uint64_t time_update_interval_us = 24 * 3600 * 1000000; // Update time every day
 
 // Error codes, based on ESP-IDF's esp_err_t
 enum class Error
@@ -173,12 +183,9 @@ public:
     }
   }
 
-  // Prints the time saved on the ESP's RTC, and also draws it on the display centered.
+  // Draws the time centered on the display, using the provided tm struct.
   void DrawTimeCentered(tm &timeinfo)
   {
-    // Print to serial
-    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-
     // Create buffer for time string
     char timestr[64];                                       // adjust size as needed
     strftime(timestr, sizeof(timestr), "%H:%M", &timeinfo); // Succinct time
@@ -189,6 +196,8 @@ public:
     Update();
   }
 
+  // Updates the display with the current contents of the framebuffer.
+  // - Clears the display and redraws the framebuffer.
   void Update()
   {
     epd_clear();
@@ -198,10 +207,10 @@ public:
 
 protected:
   uint8_t *framebuffer;
-  uint32_t buf_width = EPD_WIDTH;
-  uint32_t buf_height = EPD_HEIGHT;
-  uint32_t y_offset = -24;     // How much to move all text (-'ve ^, +'ve v)
-  uint32_t colon_offset = -24; // How much to move a colon (-'ve ^, +'ve v)
+  const uint32_t buf_width = EPD_WIDTH;
+  const uint32_t buf_height = EPD_HEIGHT;
+  const uint32_t y_offset = -24;     // How much to move all text (-'ve ^, +'ve v)
+  const uint32_t colon_offset = -24; // How much to move a colon (-'ve ^, +'ve v)
 
   // Font info
   const uint32_t NUM_CHARS = 95;         // From 0x20 to 0x7E inclusive
@@ -209,8 +218,6 @@ protected:
   const Rect_t *bboxes = Font288_bboxes; // From FontReg288.h
   const int bytes_per_char = sizeof(Font288_Table) / NUM_CHARS;
 } Display;
-// Callback function (get's called when time adjusts via NTP)
-void timeavailable(struct timeval *t) { got_time_adjustment = true; }
 
 // Initializes Serial and waits for a short period to ensure it's ready before
 // proceeding.
@@ -226,25 +233,58 @@ void setupSerial(const int wait_time_ms = 1000)
 
 void setupNTP()
 {
-  sntp_set_time_sync_notification_cb(
-      timeavailable);      // set notification call-back function
-  sntp_servermode_dhcp(1); // (optional)
-  // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2); //
-  // Manual daylight savings offset
-  configTzTime(time_zone, ntpServer1,
-               ntpServer2); // (Hopefully) Automatic daylight savings offsetting
+  sntp_servermode_dhcp(1);
+  // esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+
+  configTzTime(time_zone, ntpServer1, ntpServer2); // also calls _init()
 }
 
 void setupWiFi()
 {
   Serial.printf("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
+  if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
-    delay(200);
-    Serial.print(".");
+    Serial.println("Failed to connect via Wi-Fi!");
   }
-  Serial.println(" CONNECTED");
+  else
+  {
+    Serial.println("Connected!");
+  }
+}
+
+// Connects to Wi-Fi, gets the time from NTP, then disconnects from Wi-Fi again to save power.
+// - Returns OK if time was successfully obtained, TIMEOUT if we failed to get the time within the retry limit, or FAIL if we failed to connect to Wi-Fi.
+// - Note: We can't use async callbacks as we want to sleep while waiting for the time, so we have to block and poll for the time instead.
+Error updateTime()
+{
+  // Connect via Wi-Fi and NTP
+  WiFi.begin(ssid, password);
+  if (WiFi.waitForConnectResult() != WL_CONNECTED)
+  {
+    Serial.println("Failed to connect via Wi-Fi!");
+    return Error::FAIL;
+  }
+  esp_sntp_init();
+
+  // Get time
+  time_t now = 0;
+  struct tm timeinfo = {0};
+  int retry = 0;
+  const int retry_count = 10;
+
+  while (timeinfo.tm_year < (2020 - 1900) && ++retry < retry_count)
+  {
+    delay(1000);
+    time(&now);
+    localtime_r(&now, &timeinfo);
+  }
+
+  // Disconnect from NTP and Wi-Fi to save power
+  esp_sntp_stop();
+  WiFi.disconnect(true);
+
+  return (timeinfo.tm_year >= (2020 - 1900)) ? Error::OK : Error::TIMEOUT;
 }
 
 void setup()
@@ -271,15 +311,6 @@ void setup()
 
 void loop()
 {
-  if (got_time_adjustment)
-  {
-    Serial.println("Got time adjustment from NTP!");
-    // printLocalTime();
-    WiFi.disconnect(true);
-    Serial.println("WiFi Disconnected!");
-    got_time_adjustment = false;
-  }
-
   // Get time
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
@@ -289,6 +320,24 @@ void loop()
     return;
   }
 
+  // Update time when necessary
+  static int next_time_update_us = 0;
+  const auto current_time_us = esp_timer_get_time();
+  if (current_time_us > next_time_update_us)
+  {
+    const auto err = updateTime();
+
+    if (err != Error::OK)
+    {
+      Serial.printf("Failed to update time! Error code: %d\n", (int)err);
+    }
+    else
+    {
+      Serial.println("Time updated successfully!");
+    }
+    next_time_update_us = current_time_us + time_update_interval_us;
+  }
+
   Display.DrawTimeCentered(timeinfo);
 
   // Sleep until just after the next minute.
@@ -296,6 +345,8 @@ void loop()
   // the minute changes, not before.
   const uint64_t wait_time_us = (60 - timeinfo.tm_sec + 3) * 1000000;
   esp_sleep_enable_timer_wakeup(wait_time_us);
+  delay(1000); // ensure logs go through TODO: Remove
+
   esp_light_sleep_start(); // This pauses the CPU until the timer wakes it up,
                            // resuming from here when it wakes up.
 }
