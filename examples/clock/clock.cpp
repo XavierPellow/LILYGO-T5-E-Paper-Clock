@@ -114,7 +114,7 @@ void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
 }
 
 // Prints the time saved on the ESP's RTC
-void printLocalTime(tm &timeinfo) {
+void writeTimeToDisplay(tm &timeinfo) {
   // Print to serial
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
@@ -144,19 +144,17 @@ void printLocalTime(tm &timeinfo) {
 // Callback function (get's called when time adjusts via NTP)
 void timeavailable(struct timeval *t) { got_time_adjustment = true; }
 
-void setup() {
-  // Serial Init
-  const int end_wait = millis() + 1000;
+// Initializes Serial and waits for a short period to ensure it's ready before
+// proceeding.
+void setupSerial(const int wait_time_ms = 1000) {
+  const int end_wait = millis() + wait_time_ms;
   Serial.begin(115200);
   while (!Serial && millis() < end_wait) {
     delay(10);
   }
+}
 
-  delay(5000); // Guarentee we have a way of getting back in in case we sleep
-               // forever...
-  Serial.println("Starting up...");
-
-  // Epaper Display Init
+void setupDisplay() {
   epd_init();
 
   // Allocate memory for frame buffer
@@ -172,8 +170,9 @@ void setup() {
   // Reset Display
   epd_poweron();
   epd_clear();
+}
 
-  // NTP Init
+void setupNTP() {
   sntp_set_time_sync_notification_cb(
       timeavailable);      // set notification call-back function
   sntp_servermode_dhcp(1); // (optional)
@@ -181,8 +180,9 @@ void setup() {
   // Manual daylight savings offset
   configTzTime(time_zone, ntpServer1,
                ntpServer2); // (Hopefully) Automatic daylight savings offsetting
+}
 
-  // Connect to WiFi
+void setupWiFi() {
   Serial.printf("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -190,17 +190,26 @@ void setup() {
     Serial.print(".");
   }
   Serial.println(" CONNECTED");
+}
+
+void setup() {
+  setupSerial();
+  delay(5000); // Guarentee we have a way of getting back in in case we sleep
+               // forever...
+  Serial.println("Setup start...");
+
+  setupDisplay();
+  setupNTP();
+  setupWiFi();
 
   // Get and print time for the first time
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    printLocalTime(timeinfo);
+    writeTimeToDisplay(timeinfo);
   }
 
-  // Calculate and await the initial syncing interval
-
   // Done
-  Serial.println("Setup Complete!");
+  Serial.println("Setup complete!");
 }
 
 void loop() {
@@ -220,12 +229,13 @@ void loop() {
     return;
   }
 
-  printLocalTime(timeinfo); // it will take some time to sync time :)
+  writeTimeToDisplay(timeinfo);
 
   // Sleep until just after the next minute.
   // +3: Adding a few seconds of buffer to make sure we wake up after
   // the minute changes, not before.
   const uint64_t wait_time_us = (60 - timeinfo.tm_sec + 3) * 1000000;
   esp_sleep_enable_timer_wakeup(wait_time_us);
-  esp_light_sleep_start();
+  esp_light_sleep_start(); // This pauses the CPU until the timer wakes it up,
+                           // resuming from here when it wakes up.
 }
