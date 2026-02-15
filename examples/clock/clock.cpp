@@ -32,7 +32,6 @@ const int daylightOffset_sec = 3600;
 const char *time_zone = "AEST-10AEDT,M10.1.0,M4.1.0/3"; // Melbourne Time Zone
 
 bool got_time_adjustment = false;
-uint8_t *framebuffer;
 
 // Used to adjust the position of the text on the display, if needed
 const int x_offset = 0;
@@ -41,126 +40,166 @@ const int y_offset = -20;
 // with the colon in the middle of the display. Adjust as needed.
 const int minutes_x_offset = -80;
 
-// Font info
-const sFONT &font = Font288; // From FontReg288.h
-const int bytes_per_char = sizeof(Font288_Table) / 95;
-// 95 characters in the font file (from 0x20 to 0x7E)
+// Error codes, based on ESP-IDF's esp_err_t
+enum class Error
+{
+  FAIL = -1,
+  OK = 0,
+  NO_MEM = 0x101,
+  INVALID_ARG = 0x102,
+  INVALID_STATE = 0x103,
+  INVALID_SIZE = 0x104,
+  NOT_FOUND = 0x105,
+  NOT_SUPPORTED = 0x106,
+  TIMEOUT = 0x107,
+  INVALID_RESPONSE = 0x108,
+  INVALID_CRC = 0x109,
+  INVALID_VERSION = 0x10a,
+  INVALID_MAC = 0x10b,
+  NOT_FINISHED = 0x10c,
+  NOT_ALLOWED = 0x10d,
+};
 
 class EPDDisplay
 {
 public:
-  void setup() {}
-
-protected:
-};
-
-// this is straight up vibe coded im ngl
-void copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
-                      size_t buf_height, uint8_t *buffer)
-{
-  if (c < 32)
+  void setup()
   {
-    return; // unsupported glyph
+    epd_init();
+
+    // Allocate memory for frame buffer
+    framebuffer =
+        (uint8_t *)ps_calloc(sizeof(uint8_t), EPD_WIDTH * EPD_HEIGHT / 2);
+    if (!framebuffer)
+    {
+      Serial.println("alloc memory failed !!!");
+      while (1)
+        ;
+    }
+    memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
+
+    // Reset Display
+    epd_poweron();
+    epd_clear();
   }
 
-  const size_t char_index = (size_t)(c - 32);
-
-  const size_t font_bytes_per_row = (font.width + 7) >> 3;
-  const size_t fb_bytes_per_row = (buf_width + 1) >> 1;
-
-  const uint8_t *glyph = &font.table[char_index * bytes_per_char];
-
-  for (size_t row = 0; row < font.height; row++)
+  // this is straight up vibe coded im ngl
+  Error copyCharToBuffer(char c, size_t x, size_t y, size_t buf_width,
+                         size_t buf_height, uint8_t *buffer)
   {
-    size_t dst_y = y + row;
-    if (dst_y >= buf_height)
+    if (c < 32)
     {
-      break; // vertical clip
+      return Error::INVALID_ARG; // unsupported glyph
     }
 
-    const uint8_t *font_row = glyph + row * font_bytes_per_row;
+    const size_t char_index = (size_t)(c - 32);
 
-    uint8_t *fb_row = buffer + dst_y * fb_bytes_per_row;
+    const size_t font_bytes_per_row = (font.width + 7) >> 3;
+    const size_t fb_bytes_per_row = (buf_width + 1) >> 1;
 
-    size_t col = 0;
+    const uint8_t *glyph = &font.table[char_index * bytes_per_char];
 
-    for (size_t b = 0; b < font_bytes_per_row; b++)
+    for (size_t row = 0; row < font.height; row++)
     {
-      uint8_t bits = font_row[b];
-
-      // Up to 8 pixels per font byte
-      for (size_t i = 0; i < 8 && col < font.width; i++, col++)
+      size_t dst_y = y + row;
+      if (dst_y >= buf_height)
       {
-        size_t dst_x = x + col;
-        if (dst_x >= buf_width)
+        break; // vertical clip
+      }
+
+      const uint8_t *font_row = glyph + row * font_bytes_per_row;
+
+      uint8_t *fb_row = buffer + dst_y * fb_bytes_per_row;
+
+      size_t col = 0;
+
+      for (size_t b = 0; b < font_bytes_per_row; b++)
+      {
+        uint8_t bits = font_row[b];
+
+        // Up to 8 pixels per font byte
+        for (size_t i = 0; i < 8 && col < font.width; i++, col++)
         {
+          size_t dst_x = x + col;
+          if (dst_x >= buf_width)
+          {
+            bits <<= 1;
+            continue; // horizontal clip
+          }
+
+          if (bits & 0x80)
+          {
+            size_t fb_index = dst_x >> 1;
+            uint8_t mask = (dst_x & 1) ? 0x07 : 0x70;
+            fb_row[fb_index] &= ~mask;
+          }
+
           bits <<= 1;
-          continue; // horizontal clip
         }
+      }
+    }
 
-        if (bits & 0x80)
-        {
-          size_t fb_index = dst_x >> 1;
-          uint8_t mask = (dst_x & 1) ? 0x07 : 0x70;
-          fb_row[fb_index] &= ~mask;
-        }
+    return Error::OK;
+  }
 
-        bits <<= 1;
+  void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
+                          size_t buf_height, uint8_t *buffer)
+  {
+
+    size_t char_count = 0;
+    while (*str)
+    {
+      copyCharToBuffer(*str, x, y, buf_width, buf_height, buffer);
+      x += font.width;
+      str++;
+
+      // Adjust for the colon in the middle of the display
+      // it's only a bit of an evil hack shhhhhhhhhhh.
+      char_count++;
+      if (char_count == 3)
+      {
+        x += minutes_x_offset;
       }
     }
   }
-}
 
-void copyStringToBuffer(const char *str, size_t x, size_t y, size_t buf_width,
-                        size_t buf_height, uint8_t *buffer)
-{
-
-  size_t char_count = 0;
-  while (*str)
+  // Prints the time saved on the ESP's RTC
+  void writeTimeToDisplay(tm &timeinfo)
   {
-    copyCharToBuffer(*str, x, y, buf_width, buf_height, buffer);
-    x += font.width;
-    str++;
+    // Print to serial
+    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
-    // Adjust for the colon in the middle of the display
-    // it's only a bit of an evil hack shhhhhhhhhhh.
-    char_count++;
-    if (char_count == 3)
-    {
-      x += minutes_x_offset;
-    }
+    // Create buffer for time string
+    char timestr[64];                                       // adjust size as needed
+    strftime(timestr, sizeof(timestr), "%H:%M", &timeinfo); // Succinct time
+
+    memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
+
+    // center the text on the display (5 characters in "HH:MM")
+    const int area_width = font.width * 5 + minutes_x_offset;
+    const int x = (EPD_WIDTH - area_width) / 2 + x_offset;
+    const int y = (EPD_HEIGHT - font.height) / 2 + y_offset;
+    Rect_t area = {
+        .x = x,
+        .y = y,
+        .width = area_width,
+        .height = font.height,
+    };
+
+    copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
+    epd_clear();
+    delay(100); // small delay to ensure clear area is processed before drawing
+    epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
   }
-}
 
-// Prints the time saved on the ESP's RTC
-void writeTimeToDisplay(tm &timeinfo)
-{
-  // Print to serial
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+protected:
+  uint8_t *framebuffer;
 
-  // Create buffer for time string
-  char timestr[64];                                       // adjust size as needed
-  strftime(timestr, sizeof(timestr), "%H:%M", &timeinfo); // Succinct time
-
-  memset(framebuffer, 255, EPD_WIDTH * EPD_HEIGHT / 2);
-
-  // center the text on the display (5 characters in "HH:MM")
-  const int area_width = font.width * 5 + minutes_x_offset;
-  const int x = (EPD_WIDTH - area_width) / 2 + x_offset;
-  const int y = (EPD_HEIGHT - font.height) / 2 + y_offset;
-  Rect_t area = {
-      .x = x,
-      .y = y,
-      .width = area_width,
-      .height = font.height,
-  };
-
-  copyStringToBuffer(timestr, 0, 0, area_width, font.height, framebuffer);
-  epd_clear();
-  delay(100); // small delay to ensure clear area is processed before drawing
-  epd_draw_image(area, framebuffer, DrawMode_t::BLACK_ON_WHITE);
-}
-
+  // Font info
+  const sFONT &font = Font288; // From FontReg288.h
+  const int bytes_per_char = sizeof(Font288_Table) / 95;
+  // 95 characters in the font file (from 0x20 to 0x7E)
+} Display;
 // Callback function (get's called when time adjusts via NTP)
 void timeavailable(struct timeval *t) { got_time_adjustment = true; }
 
@@ -174,26 +213,6 @@ void setupSerial(const int wait_time_ms = 1000)
   {
     delay(10);
   }
-}
-
-void setupDisplay()
-{
-  epd_init();
-
-  // Allocate memory for frame buffer
-  framebuffer =
-      (uint8_t *)ps_calloc(sizeof(uint8_t), EPD_WIDTH * EPD_HEIGHT / 2);
-  if (!framebuffer)
-  {
-    Serial.println("alloc memory failed !!!");
-    while (1)
-      ;
-  }
-  memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
-
-  // Reset Display
-  epd_poweron();
-  epd_clear();
 }
 
 void setupNTP()
@@ -226,7 +245,7 @@ void setup()
                // forever...
   Serial.println("Setup start...");
 
-  setupDisplay();
+  Display.setup();
   setupNTP();
   setupWiFi();
 
@@ -234,7 +253,7 @@ void setup()
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    writeTimeToDisplay(timeinfo);
+    Display.writeTimeToDisplay(timeinfo);
   }
 
   // Done
@@ -261,7 +280,7 @@ void loop()
     return;
   }
 
-  writeTimeToDisplay(timeinfo);
+  Display.writeTimeToDisplay(timeinfo);
 
   // Sleep until just after the next minute.
   // +3: Adding a few seconds of buffer to make sure we wake up after
