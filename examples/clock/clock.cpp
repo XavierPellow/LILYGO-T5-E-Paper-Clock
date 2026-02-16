@@ -5,6 +5,15 @@
 #ifndef BOARD_HAS_PSRAM
 #error "Please enable PSRAM, Arduino IDE -> tools -> PSRAM -> OPI !!!"
 #endif
+#define ENABLE_PRODUCTION
+
+#ifdef ENABLE_PRODUCTION
+#define LOG_PRINTF(...) ((void)0) // Disable all logging
+#define LOG_PRINTLN(...) ((void)0)
+#else
+#define LOG_PRINTF(...) Serial.printf(__VA_ARGS__)
+#define LOG_PRINTLN(...) Serial.println(__VA_ARGS__)
+#endif
 
 // LIBRARIES
 // Epaper
@@ -75,7 +84,7 @@ public:
         (uint8_t *)ps_calloc(sizeof(uint8_t), EPD_WIDTH * EPD_HEIGHT / 2);
     if (!framebuffer)
     {
-      Serial.println("alloc memory failed !!!");
+      LOG_PRINTLN("alloc memory failed !!!");
       while (1)
         ;
     }
@@ -206,7 +215,7 @@ public:
   void Update()
   {
     ClearDisplay();
-    delay(100); // small delay to ensure clear area is processed before drawing
+    // delay(100); // small delay to ensure clear area is processed before drawing
     epd_draw_image({0, 0, EPD_WIDTH, EPD_HEIGHT}, framebuffer, DrawMode_t::BLACK_ON_WHITE);
   }
 
@@ -246,15 +255,15 @@ void setupNTP()
 
 void setupWiFi()
 {
-  Serial.printf("Connecting to %s ", ssid);
+  LOG_PRINTF("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
-    Serial.println("Failed to connect via Wi-Fi!");
+    LOG_PRINTLN("Failed to connect via Wi-Fi!");
   }
   else
   {
-    Serial.println("Connected!");
+    LOG_PRINTLN("Connected!");
   }
 }
 
@@ -267,7 +276,7 @@ Error updateTime()
   WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
-    Serial.println("Failed to connect via Wi-Fi!");
+    LOG_PRINTLN("Failed to connect via Wi-Fi!");
     return Error::FAIL;
   }
   esp_sntp_init();
@@ -297,7 +306,7 @@ void setup()
   setupSerial();
   delay(5000); // Guarentee we have a way of getting back in in case we sleep
                // forever...
-  Serial.println("Setup start...");
+  LOG_PRINTLN("Setup start...");
 
   Display.setup();
   setupNTP();
@@ -311,7 +320,7 @@ void setup()
   }
 
   // Done
-  Serial.println("Setup complete!");
+  LOG_PRINTLN("Setup complete!");
 }
 
 void loop()
@@ -321,7 +330,7 @@ void loop()
   if (!getLocalTime(&timeinfo))
   { // Write into time struct using the ESP's
     // local RTC time?
-    Serial.println("No time available (yet)");
+    LOG_PRINTLN("No time available (yet)");
     return;
   }
 
@@ -334,11 +343,11 @@ void loop()
 
     if (err != Error::OK)
     {
-      Serial.printf("Failed to update time! Error code: %d\n", (int)err);
+      LOG_PRINTF("Failed to update time! Error code: %d\n", (int)err);
     }
     else
     {
-      Serial.println("Time updated successfully!");
+      LOG_PRINTLN("Time updated successfully!");
     }
     next_time_update_us = current_time_us + time_update_interval_us;
   }
@@ -350,7 +359,9 @@ void loop()
   // the minute changes, not before.
   const uint64_t wait_time_us = (60 - timeinfo.tm_sec + 3) * 1000000;
   esp_sleep_enable_timer_wakeup(wait_time_us);
-  delay(1000); // ensure logs go through TODO: Remove
+#ifdef ENABLE_PRODUCTION
+  delay(1000); // ensure logs go through
+#endif
 
   esp_light_sleep_start(); // This pauses the CPU until the timer wakes it up,
                            // resuming from here when it wakes up.
